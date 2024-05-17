@@ -9,10 +9,14 @@ WiFiClient client;
 #define TRANSMITTER_PIN 2  // Pin connected to the IR transmitter
 #define SHOOT_PIN 9        // Pin connected to the shoot button
 #define RELOAD_PIN 27      // Pin connected to the reload button
+#define motorPin 25         // Pin connected to te vibration motor
+#define redPin 10         // Pin connected to te vibration motor
+#define greenPin 5         // Pin connected to te vibration motor
+#define bluePin 13         // Pin connected to te vibration motor
 
-const char* ssid = "Xandra-01";
-const char* password = "Auenag-01";
-const char* host = "192.168.68.110";  // IP address of your Java server
+const char* ssid = "Lasergame";
+const char* password = "avans-01";
+const char* host = "192.168.137.1";  // IP address of your Java server
 const int gunID = 0;
 
 const bool debug = true;
@@ -20,6 +24,19 @@ const bool debug = true;
 int DELAY_BETWEEN_REPEAT = 50;
 int maxAmmo = 12;
 int ammo = 12;
+
+
+bool ledState;
+float seconds;
+float secondsLed;
+float secondsMotor;
+float vibrateTime;
+
+hw_timer_t* timer = NULL;
+
+void IRAM_ATTR onTimer() {
+  seconds += 0.1;
+}
 
 void setup() {
   Serial.begin(115200);
@@ -32,6 +49,18 @@ void setup() {
   IrReceiver.start();
   pinMode(SHOOT_PIN, INPUT_PULLUP);
   pinMode(RELOAD_PIN, INPUT_PULLUP);
+  pinMode(motorPin, OUTPUT);
+  digitalWrite(motorPin, false);
+
+  pinMode(redPin, OUTPUT);
+  pinMode(greenPin, OUTPUT);
+  pinMode(bluePin, OUTPUT);
+  led(0,0,1);
+
+  timer = timerBegin(0, 8, true);
+  timerAttachInterrupt(timer, &onTimer, true);
+  timerAlarmWrite(timer, 1000000, true);
+  timerAlarmEnable(timer);  //Just Enable
 }
 
 bool reloadStateLast, shootStateLast;
@@ -65,7 +94,7 @@ void readInputs() {
     if (protocol == 8 && command == 0x01) {  //check for correct protcol and correct command
       hit(address);
     }
-    delay(10);
+    delay(20);
     IrReceiver.resume();  // resume receiver
   }
   if (shootState != shootStateLast) {  //check is button state changed
@@ -81,17 +110,64 @@ void reload() {
     ammo = maxAmmo;
 }
 
+
 void shoot() {
-  if (ammo > 0) {
-    ammo--;
+  if (ammo != 0) {
+    if (ammo > 0) {
+      ammo--;
+    }
     IrSender.sendNEC(gunID, 0x01, 0);
+    motor(0.2, 255);
   }
   Serial.println(ammo);
 }
 
+
 void hit(int address) {
   if (client.connected()) {
+    motor(0.2, 255);
     client.println("hitby:" + String(address));
+  }
+}
+
+void motor(float duration, int strenght) {
+  if (strenght >= 255) {
+    strenght = 255;
+  }
+  secondsMotor = seconds;
+  vibrateTime = duration;
+  // digitalWrite(motorPin, true);
+  analogWrite(motorPin, strenght);
+}
+void led(int red, int green, int blue) {
+  if (red == 1) {
+    red = 0;
+  } else {
+    red = 1;
+  }
+  if (green == 1) {
+    green = 0;
+  } else {
+    green = 1;
+  }
+  if (blue == 1) {
+    blue = 0;
+  } else {
+    blue = 1;
+  }
+  digitalWrite(greenPin, green);
+  digitalWrite(redPin, red);
+  digitalWrite(bluePin, blue);
+}
+
+void checktime() {
+  // Serial.println(seconds);
+  // Serial.println(secondsMotor);
+  // Serial.println(vibrateTime);
+  if (seconds - secondsMotor >= vibrateTime) {
+    secondsMotor = seconds;
+    vibrateTime = 0;
+    analogWrite(motorPin, 0);
   }
 }
 
@@ -105,6 +181,7 @@ void loop() {
     client.println("ID:" + String(gunID));  // send id to GUI server
   }
   while (client.connected()) {  // if we are connected run all logic
+    checktime();
     readInputs();
     if (client.available()) {
       String line = client.readStringUntil('\n');
@@ -124,6 +201,6 @@ void loop() {
         // }
       }
     }
-    delay(10);
+    delay(20);
   }
 }
